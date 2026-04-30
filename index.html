@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <title>별자리 맞추기 메모리 게임</title>
+    <style>
+        body { 
+            display: flex; 
+            flex-direction: column; 
+            align-items: center; 
+            /* 은은한 우주 배경 이미지 적용 (외부 무료 이미지 링크) */
+            background: url('https://images.unsplash.com/photo-1506318137071-a8e063b4bec0?ixlib=rb-4.0.3&auto=format&fit=crop&w=1920&q=80') no-repeat center center fixed;
+            background-size: cover;
+            background-color: #0b0d17;
+            margin: 0; 
+            padding: 30px; 
+            font-family: 'Malgun Gothic', sans-serif; 
+            color: white;
+        }
+        h1 {
+            font-size: 48px;
+            font-weight: bold;
+            margin-bottom: 40px;
+            text-shadow: 2px 4px 10px rgba(0, 0, 0, 0.8);
+            text-align: center;
+            letter-spacing: 2px;
+        }
+        .grid { 
+            display: grid; 
+            grid-template-columns: repeat(6, 160px); 
+            gap: 15px; 
+        }
+        .card { 
+            width: 160px; 
+            height: 120px; 
+            perspective: 1000px; 
+            cursor: pointer; 
+        }
+        .inner { 
+            position: relative; 
+            width: 100%; 
+            height: 100%; 
+            transition: transform 0.6s; 
+            transform-style: preserve-3d; 
+            box-shadow: 0 4px 8px rgba(0,0,0,0.5); 
+            border-radius: 10px; 
+        }
+        .card.flipped .inner { transform: rotateY(180deg); }
+        .front, .back { 
+            position: absolute; 
+            width: 100%; 
+            height: 100%; 
+            backface-visibility: hidden; 
+            display: flex; 
+            align-items: center; 
+            justify-content: center; 
+            border-radius: 10px; 
+        }
+        /* 카드 뒷면(퍼즐 배경) 스타일 */
+        .back { 
+            /* 개별 카드의 배경 이미지는 자바스크립트에서 조각내어 적용합니다 */
+            color: white; 
+            border: 2px solid #e94560; 
+            font-size: 36px; 
+            font-weight: bold; 
+            /* 그림 위에서 숫자가 선명하게 보이도록 강한 그림자 추가 */
+            text-shadow: 2px 2px 5px rgba(0,0,0,1), -2px -2px 5px rgba(0,0,0,1);
+        }
+        /* 퍼즐 이미지를 살짝 어둡게 덮어 번호를 더 돋보이게 하는 오버레이 효과 */
+        .back::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0, 0, 0, 0.2); 
+            border-radius: 8px;
+        }
+        .back-number {
+            position: relative;
+            z-index: 1;
+        }
+        .front { 
+            background: rgba(15, 52, 96, 0.9); 
+            transform: rotateY(180deg); 
+            overflow: hidden; 
+        }
+        .front img { 
+            width: 100%; 
+            height: 100%; 
+            object-fit: contain; 
+        }
+    </style>
+</head>
+<body>
+    <h1>별자리 맞추기 '메모리 게임'</h1>
+
+    <div class="grid" id="game-board"></div>
+
+    <script>
+        const imgUrls = [
+            '게자리.png', '궁수자리.png', '물고기자리.png', '물병자리.png', 
+            '사자자리.png', '쌍둥이자리.png', '양자리.png', '염소자리.png', 
+            '전갈자리.png', '처녀자리.png', '천칭자리.png', '황소자리.png'
+        ];
+        
+        const deck = [...imgUrls, ...imgUrls].sort(() => Math.random() - 0.5);
+        const board = document.getElementById('game-board');
+
+        let hasFlippedCard = false;
+        let lockBoard = false;
+        let firstCard, secondCard;
+        let matchedPairs = 0; 
+
+        deck.forEach((url, index) => {
+            const card = document.createElement('div');
+            card.className = 'card';
+            card.dataset.name = url;
+
+            // 24개 카드(가로 6칸, 세로 4칸) 그리드에서의 위치 계산
+            const col = index % 6;
+            const row = Math.floor(index / 6);
+            
+            // 전체 이미지(images.jpg)를 퍼즐처럼 자르기 위한 배경 위치 비율(%) 계산
+            const bgPosX = (col / 5) * 100;
+            const bgPosY = (row / 3) * 100;
+
+            card.innerHTML = `
+                <div class="inner">
+                    <!-- 뒷면에 images.jpg를 분할 적용 -->
+                    <div class="back" style="background-image: url('images.jpg'); background-size: 600% 400%; background-position: ${bgPosX}% ${bgPosY}%;">
+                        <span class="back-number">${index + 1}</span>
+                    </div>
+                    <div class="front"><img src="${url}" alt="별자리"></div>
+                </div>
+            `;
+            
+            card.addEventListener('click', function() {
+                if (lockBoard) return;
+                if (this === firstCard) return;
+
+                this.classList.add('flipped');
+
+                if (!hasFlippedCard) {
+                    hasFlippedCard = true;
+                    firstCard = this;
+                    return;
+                }
+
+                secondCard = this;
+                checkForMatch();
+            });
+
+            board.appendChild(card);
+        });
+
+        function checkForMatch() {
+            let isMatch = firstCard.dataset.name === secondCard.dataset.name;
+            
+            if (isMatch) {
+                matchedPairs++;
+                disableCards();
+                
+                // 12쌍을 모두 맞췄을 때의 완료 알림
+                if (matchedPairs === 12) {
+                    setTimeout(() => {
+                        alert('축하합니다! 모든 별자리를 다 맞추셨습니다 🎉');
+                    }, 500);
+                }
+            } else {
+                unflipCards();
+            }
+        }
+
+        function disableCards() {
+            firstCard.removeEventListener('click', disableCards);
+            secondCard.removeEventListener('click', disableCards);
+            resetBoard();
+        }
+
+        function unflipCards() {
+            lockBoard = true;
+            setTimeout(() => {
+                firstCard.classList.remove('flipped');
+                secondCard.classList.remove('flipped');
+                resetBoard();
+            }, 1000);
+        }
+
+        function resetBoard() {
+            [hasFlippedCard, lockBoard] = [false, false];
+            [firstCard, secondCard] = [null, null];
+        }
+    </script>
+</body>
+</html>
